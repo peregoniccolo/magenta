@@ -1,13 +1,14 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow
 
 tf = tensorflow.compat.v1
 
 tf.disable_v2_behavior()
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 import sounddevice as sd
+import soundfile as sf
 import librosa
 from magenta.models.nsynth.utils import load_audio
 from magenta.models.gansynth.lib import flags as lib_flags
@@ -168,7 +169,7 @@ def play_audio_array(to_play):
 if __name__ == "__main__":
 	check_out_dir()
 	model = load_model()
-	print('done importing\n')
+	print('done loading\n')
 	
 	# load midi file
 	ns = None
@@ -181,7 +182,7 @@ if __name__ == "__main__":
 			print('Failed loading MIDI, try again')
 
 	print(f'Loaded {midi_path}')
-	note_seq.plot_sequence(ns)
+	#note_seq.plot_sequence(ns)
 
 	# sample latent space for random instruments
 	number_of_random_instruments = get_num_instruments()
@@ -199,7 +200,7 @@ if __name__ == "__main__":
 		play_audio_array(audio_note)
 	
 	# combine instruments 
-	instruments = [0, 2, 4, 0] 
+	instruments = [0, 1, 2, 0] 
 	times = [0, 0.3, 0.6, 1.0] 
 
 	# Force endpoints
@@ -213,7 +214,7 @@ if __name__ == "__main__":
 	z_notes = gu.get_z_notes(notes_2['start_times'], z_instruments, t_instruments)
 
 	# Generate audio for each note
-	print('Generating {len(z_notes)} samples...')
+	print(f'Generating {len(z_notes)} samples...')
 	audio_notes = model.generate_samples_from_z(z_notes, notes_2['pitches'])
 
 	# Make a single audio clip
@@ -223,8 +224,9 @@ if __name__ == "__main__":
 							notes_2['velocities'])
 
 	# Play the audio
-	print('\nPlaying generated audio:')
+	print('\nPlaying generated audio...')
 	play_audio_array(audio_clip)
 
-	fname = os.path.join(output_dir, 'generated_clip.wav')
-	gu.save_wav(audio_clip, fname)
+	fname = os.path.join(output_dir, 'generated_clip.mp3')
+	sf.write(data=audio_clip, file=fname, samplerate=SR)
+	print(f'saved at {fname}')
