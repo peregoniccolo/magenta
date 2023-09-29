@@ -1,11 +1,7 @@
 import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow
-
-tf = tensorflow.compat.v1
-
-tf.disable_v2_behavior()
-# tf.logging.set_verbosity(tf.logging.ERROR)
 
 import sounddevice as sd
 import soundfile as sf
@@ -34,8 +30,8 @@ SR = 16000
 def check_out_dir():
 	"""Make an output directory if it doesn't exist"""
 	OUTPUT_DIR = util.expand_path(output_dir)
-	if not tf.gfile.Exists(OUTPUT_DIR):
-		tf.gfile.MakeDirs(OUTPUT_DIR)
+	if not os.path.exists(OUTPUT_DIR):
+		os.mkdir(OUTPUT_DIR)
 
 
 def load_model():
@@ -143,7 +139,8 @@ def specplot(audio_clip):
 	plt.matshow(power[::-1, 2:-2], aspect="auto", cmap=plt.cm.magma)
 	plt.yticks([])
 	plt.xticks([])
-	
+
+
 def select_midi_seq():
 	root = tk.Tk()
 	root.withdraw()
@@ -151,82 +148,113 @@ def select_midi_seq():
 	file_path = filedialog.askopenfilename()
 	return file_path
 
+
 def get_num_instruments():
-	number = input('Select the number of instruments to generate: ')
+	number = input("Select the number of instruments to generate: ")
 	while not number.isdigit():
-		number = input('Input wasn\'t a digit, please select the number of instruments to generate: ')
+		number = input(
+			"Input wasn't a digit, please select the number of instruments to generate: "
+		)
 	if int(number) == 0:
-		print('Number must be > 0')
+		print("Number must be > 0")
 		number = get_num_instruments()
 	return int(number)
 
+
 def play_audio_array(to_play):
 	sd.play(to_play, SR)
-	time.sleep(len(to_play)/SR)
+	time.sleep(len(to_play) / SR)
 	sd.stop()
 
 
-if __name__ == "__main__":
+def setup():
+	global tf
+	tf = tensorflow.compat.v1
+	tf.disable_v2_behavior()
+
+	print("starting setup")
 	check_out_dir()
 	model = load_model()
-	print('done loading\n')
-	
+	print("done loading\n")
+	return model
+
+
+def generate_instruments(model, midi_path, number_of_random_instr_seq):
 	# load midi file
 	ns = None
-	
-	while ns == None:
-		midi_path = select_midi_seq()
-		try:
-			ns, notes_2 = load_midi(midi_path)
-		except Exception as e:
-			print('Failed loading MIDI, try again')
+	try:
+		ns, notes = load_midi(midi_path)
+	except Exception as e:
+		print("Failed loading MIDI")
+		exit(1)
+	# while ns == None:
+	# 	midi_path = select_midi_seq()
+	# 	try:
+	# 		ns, notes = load_midi(midi_path)
+	# 	except Exception as e:
+	# 		print('Failed loading MIDI, try again')
 
-	print(f'Loaded {midi_path}')
-	#note_seq.plot_sequence(ns)
+	print(f"Loaded {midi_path}")
+	# note_seq.plot_sequence(ns)
 
-	# sample latent space for random instruments
-	number_of_random_instruments = get_num_instruments()
+	# sample latent space for random instr_seq
 	pitch_preview = 60
-	n_preview = number_of_random_instruments
+	n_preview = number_of_random_instr_seq
 
 	pitches_preview = [pitch_preview] * n_preview
-	print('generating...')
+	print("generating...")
 	z_preview = model.generate_z(n_preview)
 
-	audio_notes_list = []
 	audio_notes = model.generate_samples_from_z(z_preview, pitches_preview)
+	audio_notes_list = []
 	for i, audio_note in enumerate(audio_notes):
 		print(f"Instrument: {i}")
-		play_audio_array(audio_note)
-	
-	# combine instruments 
-	instruments = [0, 1, 2, 0] 
-	times = [0, 0.3, 0.6, 1.0] 
+		audio_notes_list.append(audio_note)
+
+	return audio_notes_list, z_preview, notes
+
+
+def generate_audio(model, z_preview, notes, instr_seq, time_seq, name):
+	# combine instr_seq
+	# instr_seq = [0, 1, 2, 0]
+	# time_seq = [0, 0.3, 0.6, 1.0]
 
 	# Force endpoints
-	times[0] = -0.001
-	times[-1] = 1.0
+	time_seq[0] = -0.001
+	time_seq[-1] = 1.0
 
-	z_instruments = np.array([z_preview[i] for i in instruments])
-	t_instruments = np.array([notes_2['end_times'][-1] * t for t in times])
+	z_instr_seq = np.array([z_preview[i] for i in instr_seq])
+	t_instr_seq = np.array([notes["end_times"][-1] * t for t in time_seq])
 
 	# Get latent vectors for each note
-	z_notes = gu.get_z_notes(notes_2['start_times'], z_instruments, t_instruments)
+	z_notes = gu.get_z_notes(notes["start_times"], z_instr_seq, t_instr_seq)
 
 	# Generate audio for each note
-	print(f'Generating {len(z_notes)} samples...')
-	audio_notes = model.generate_samples_from_z(z_notes, notes_2['pitches'])
+	print(f"Generating {len(z_notes)} samples...")
+	audio_notes = model.generate_samples_from_z(z_notes, notes["pitches"])
 
 	# Make a single audio clip
-	audio_clip = combine_notes(audio_notes,
-							notes_2['start_times'],
-							notes_2['end_times'],
-							notes_2['velocities'])
+	audio_clip = combine_notes(
+		audio_notes, notes["start_times"], notes["end_times"], notes["velocities"]
+	)
 
 	# Play the audio
-	print('\nPlaying generated audio...')
-	play_audio_array(audio_clip)
+	# print('\nPlaying generated audio...')
+	# play_audio_array(audio_clip)
 
-	fname = os.path.join(output_dir, 'generated_clip.mp3')
+	fname = os.path.join(output_dir, f"{name}.mp3")
 	sf.write(data=audio_clip, file=fname, samplerate=SR)
-	print(f'saved at {fname}')
+	print(f"saved at {fname}")
+
+	time_seq[0] = 0
+	time_seq[-1] = 1
+
+
+if __name__ == "__main__":
+	model = setup()
+	num = get_num_instruments()
+	midi_path = select_midi_seq()
+	audio_notes_list, z_preview, notes = generate_instruments(model, midi_path, num)
+	instr_seq = [0, 1, 2, 0]
+	time_seq = [0, 0.3, 0.6, 1.0]
+	generate_audio(model, z_preview, notes, instr_seq, time_seq, 'test_name')
