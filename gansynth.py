@@ -1,12 +1,12 @@
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import tensorflow
 
 import sounddevice as sd
 import soundfile as sf
 import librosa
-from magenta.models.nsynth.utils import load_audio
 from magenta.models.gansynth.lib import flags as lib_flags
 from magenta.models.gansynth.lib import generate_util as gu
 from magenta.models.gansynth.lib import model as lib_model
@@ -22,6 +22,7 @@ import time
 # GLOBALS
 CKPT_DIR = "gs://magentadata/models/gansynth/acoustic_only"
 output_dir = "gansynth/samples"
+output_name = "generated_audio"
 BATCH_SIZE = 16
 SR = 16000
 
@@ -31,7 +32,7 @@ def check_out_dir():
 	"""Make an output directory if it doesn't exist"""
 	OUTPUT_DIR = util.expand_path(output_dir)
 	if not os.path.exists(OUTPUT_DIR):
-		os.mkdir(OUTPUT_DIR)
+		os.makedirs(OUTPUT_DIR)
 
 
 def load_model():
@@ -171,6 +172,7 @@ def setup():
 	global tf
 	tf = tensorflow.compat.v1
 	tf.disable_v2_behavior()
+	tf.logging.set_verbosity(tf.logging.ERROR)
 
 	print("starting setup")
 	check_out_dir()
@@ -214,11 +216,14 @@ def generate_instruments(model, midi_path, number_of_random_instr_seq):
 	return audio_notes_list, z_preview, notes
 
 
-def generate_audio(model, z_preview, notes, instr_seq, time_seq, name):
-	# combine instr_seq
-	# instr_seq = [0, 1, 2, 0]
-	# time_seq = [0, 0.3, 0.6, 1.0]
-
+def generate_audio(
+	model,
+	z_preview,
+	notes,
+	instr_seq=[0, 1, 2],
+	time_seq=[0, 0.5, 1.0],
+	name=output_name,
+):
 	# Force endpoints
 	time_seq[0] = -0.001
 	time_seq[-1] = 1.0
@@ -250,6 +255,11 @@ def generate_audio(model, z_preview, notes, instr_seq, time_seq, name):
 	time_seq[-1] = 1
 
 
+def set_output_dir(dir):
+	global output_dir
+	output_dir = dir
+
+
 if __name__ == "__main__":
 	model = setup()
 	num = get_num_instruments()
@@ -257,4 +267,4 @@ if __name__ == "__main__":
 	audio_notes_list, z_preview, notes = generate_instruments(model, midi_path, num)
 	instr_seq = [0, 1, 2, 0]
 	time_seq = [0, 0.3, 0.6, 1.0]
-	generate_audio(model, z_preview, notes, instr_seq, time_seq, 'test_name')
+	generate_audio(model, z_preview, notes, instr_seq, time_seq, "test_name")
