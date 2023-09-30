@@ -263,6 +263,7 @@ def set_output_dir(dir):
 if __name__ == "__main__":
 	model = setup()
 	num = get_num_instruments()
+	print("Select midi file")
 	midi_path = select_midi_seq()
 	audio_notes_list, z_preview, notes = generate_instruments(model, midi_path, num)
 	instr_seq = [0, 1, 2, 0]
